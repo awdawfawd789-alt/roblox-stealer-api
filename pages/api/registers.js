@@ -88,6 +88,61 @@ const MM2_VALUES = {
   'NightKnife':            { sv: 500,    usd: 0.60 },
   'NightGun':              { sv: 450,    usd: 0.55 },
 
+  // ── SCYTHES ────────────────────────────────────────────
+  'Scythe':                { sv: 35000,  usd: 43   },
+  'IceScythe':             { sv: 20000,  usd: 25   },
+  'FlameScythe':           { sv: 18000,  usd: 22   },
+  'GoldScythe':            { sv: 12000,  usd: 15   },
+  'ShadowScythe':          { sv: 10000,  usd: 12   },
+  'ChromaScythe':          { sv: 90000,  usd: 110  },
+
+  // ── VALENTINES / SEASONAL KNIVES ──────────────────────
+  'Lovely':                { sv: 3000,   usd: 3.75 },
+  'Love':                  { sv: 2500,   usd: 3.10 },
+  'Heartblade':            { sv: 2000,   usd: 2.50 },
+  'Sweetheart':            { sv: 1800,   usd: 2.20 },
+  'CupidsArrow':           { sv: 1500,   usd: 1.85 },
+  'RoseGold':              { sv: 1200,   usd: 1.50 },
+  'Lollipop':              { sv: 800,    usd: 1.00 },
+  'Candy_K':               { sv: 1200,   usd: 1.50 },
+  'Candy_G':               { sv: 1000,   usd: 1.25 },
+
+  // ── SEASONAL / LIMITED ────────────────────────────────
+  'Duckies':               { sv: 500,    usd: 0.60 },
+  'Duckie':                { sv: 500,    usd: 0.60 },
+  'Spider':                { sv: 1500,   usd: 1.85 },
+  'Pumpkinator':           { sv: 2500,   usd: 3.10 },
+  'Hallows':               { sv: 3000,   usd: 3.75 },
+  'Turkey':                { sv: 800,    usd: 1.00 },
+  'Wreath':                { sv: 600,    usd: 0.75 },
+  'Sleigh':                { sv: 700,    usd: 0.85 },
+  'Arctic':                { sv: 900,    usd: 1.10 },
+  'Blizzard':              { sv: 1100,   usd: 1.35 },
+  'Starfire':              { sv: 2000,   usd: 2.50 },
+  'Starlight':             { sv: 1500,   usd: 1.85 },
+  'Flames':                { sv: 1200,   usd: 1.50 },
+  'Storm':                 { sv: 1000,   usd: 1.25 },
+  'Thunder':               { sv: 900,    usd: 1.10 },
+  'Neon':                  { sv: 800,    usd: 1.00 },
+  'Galaxy':                { sv: 1500,   usd: 1.85 },
+  'Comet':                 { sv: 700,    usd: 0.85 },
+  'Shooting':              { sv: 600,    usd: 0.75 },
+  'Cherry':                { sv: 400,    usd: 0.50 },
+  'Sunrise':               { sv: 350,    usd: 0.43 },
+  'Sunset':                { sv: 350,    usd: 0.43 },
+  'Shadow':                { sv: 1200,   usd: 1.50 },
+  'Phantom':               { sv: 900,    usd: 1.10 },
+  'Raven':                 { sv: 700,    usd: 0.85 },
+  'Crow':                  { sv: 600,    usd: 0.75 },
+  'Bat':                   { sv: 500,    usd: 0.60 },
+  'Ghost':                 { sv: 400,    usd: 0.50 },
+  'Cursed':                { sv: 300,    usd: 0.37 },
+  'Eternal':               { sv: 1500,   usd: 1.85 },
+  'Abyss':                 { sv: 1200,   usd: 1.50 },
+  'Void':                  { sv: 800,    usd: 1.00 },
+  'Corrupt':               { sv: 600,    usd: 0.75 },
+  'Corrupt_K':             { sv: 600,    usd: 0.75 },
+
   // ── RARES ──────────────────────────────────────────────
   'Uncommon':              { sv: 200,    usd: 0.25 },
   'UncommonKnife':         { sv: 200,    usd: 0.25 },
@@ -106,23 +161,53 @@ const MM2_VALUES = {
   'CommonGun':             { sv: 5,      usd: 0.01 },
 };
 
-// Normalize item name for lookup (strip spaces, lowercase, try various formats)
+// Normalize item name for lookup.
+// MM2 stores items internally as e.g. "Love_K_2023", "Duckies_G_2026", "Scythe_K"
+// Pattern: BaseName_K_YEAR (knife) or BaseName_G_YEAR (gun)
+// We strip the _K/_G suffix and year token to find the base item name.
 function lookupValue(rawName) {
   if (!rawName) return null;
 
-  // Direct match
-  if (MM2_VALUES[rawName]) return MM2_VALUES[rawName];
+  const candidates = new Set();
+  candidates.add(rawName);
 
-  // Case-insensitive match
-  const lowerName = rawName.toLowerCase();
-  for (const [key, val] of Object.entries(MM2_VALUES)) {
-    if (key.toLowerCase() === lowerName) return val;
+  // Strip trailing year token: _2020 _2021 ... _2030
+  const noYear = rawName.replace(/_20\d{2}$/, '');
+  candidates.add(noYear);
+
+  // Strip _K or _G suffix (knife/gun marker) with optional year
+  // e.g. Love_K_2023 → Love, Duckies_G_2026 → Duckies
+  const noSuffix = rawName.replace(/_(K|G)(_20\d{2})?$/i, '');
+  candidates.add(noSuffix);
+
+  // Also try with the suffix collapsed: Love_K → LoveKnife, LoveK, Love
+  const base = noSuffix;
+  candidates.add(base + 'Knife');
+  candidates.add(base + 'Gun');
+  candidates.add(base + 'K');
+  candidates.add(base + 'G');
+
+  // Strip ALL underscores/spaces/hyphens for fuzzy match
+  const stripped = rawName.replace(/[\s_-]/g, '').toLowerCase();
+
+  for (const candidate of candidates) {
+    // Direct match
+    if (MM2_VALUES[candidate]) return MM2_VALUES[candidate];
+
+    // Case-insensitive match
+    const lower = candidate.toLowerCase();
+    for (const [key, val] of Object.entries(MM2_VALUES)) {
+      if (key.toLowerCase() === lower) return val;
+    }
   }
 
-  // Partial match (e.g. "Chroma Gemstone" → "ChromaGemstone")
-  const stripped = rawName.replace(/[\s_-]/g, '');
+  // Final fuzzy: strip all non-alpha and compare
   for (const [key, val] of Object.entries(MM2_VALUES)) {
-    if (key.replace(/[\s_-]/g, '').toLowerCase() === stripped.toLowerCase()) return val;
+    const keyStripped = key.replace(/[\s_-]/g, '').toLowerCase();
+    if (keyStripped === stripped) return val;
+    // Also try base of candidate stripped against key stripped
+    const baseStripped = noSuffix.replace(/[\s_-]/g, '').toLowerCase();
+    if (keyStripped === baseStripped) return val;
   }
 
   return null;
@@ -168,11 +253,24 @@ export default async function handler(req, res) {
         return { ...item, sv: lookup?.sv ?? null, usd: itemUSD };
       });
 
-      // Sort highest USD value first, unknowns last
+      // Sort: known value (high→low) → unknown/unlisted → confirmed $0 junk
       valuedItems.sort((a, b) => {
-        if (a.usd === null && b.usd === null) return 0;
-        if (a.usd === null) return 1;
-        if (b.usd === null) return -1;
+        const aIsJunk    = a.usd !== null && a.usd === 0;
+        const bIsJunk    = b.usd !== null && b.usd === 0;
+        const aIsUnknown = a.usd === null;
+        const bIsUnknown = b.usd === null;
+
+        // Both unknown → equal
+        if (aIsUnknown && bIsUnknown) return 0;
+        // Both junk → equal
+        if (aIsJunk && bIsJunk) return 0;
+        // Junk goes last
+        if (aIsJunk) return 1;
+        if (bIsJunk) return -1;
+        // Unknown goes before junk but after known value
+        if (aIsUnknown) return 1;
+        if (bIsUnknown) return -1;
+        // Both have real value → sort descending
         return b.usd - a.usd;
       });
 
