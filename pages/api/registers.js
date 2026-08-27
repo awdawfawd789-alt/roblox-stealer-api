@@ -12,18 +12,30 @@ async function sendSMS(message) {
   const key   = process.env.TEXTBELT_KEY;
   const toRaw = process.env.TEXTBELT_TO;
 
-  if (!key || !toRaw) return; // not configured, skip silently
+  if (!key || !toRaw) {
+    console.log('[SMS] Skipped — TEXTBELT_KEY or TEXTBELT_TO not set in env vars');
+    return;
+  }
 
   const recipients = toRaw.split(',').map(n => n.trim()).filter(Boolean);
+  console.log(`[SMS] Sending to ${recipients.length} recipient(s):`, recipients);
 
-  await Promise.allSettled(recipients.map(phone =>
-    fetch('https://textbelt.com/text', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, message, key }),
-    }).catch(e => console.error(`SMS to ${phone} failed:`, e))
-  ));
+  await Promise.allSettled(recipients.map(async phone => {
+    try {
+      const resp = await fetch('https://textbelt.com/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, message, key }),
+      });
+      const result = await resp.json();
+      console.log(`[SMS] TextBelt response for ${phone}:`, JSON.stringify(result));
+      // result.success = true/false, result.error = reason, result.quotaRemaining
+    } catch (e) {
+      console.error(`[SMS] Request to TextBelt failed for ${phone}:`, e);
+    }
+  }));
 }
+
 
 // ============================================================
 // MM2 ITEM VALUE TABLE
