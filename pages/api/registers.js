@@ -10,24 +10,26 @@ async function sendSMS(message) {
   const sid   = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from  = process.env.TWILIO_FROM_NUMBER;
-  const to    = process.env.TWILIO_TO_NUMBER;
+  const toRaw = process.env.TWILIO_TO_NUMBER; // comma-separated for multiple: +1xxx,+1yyy
 
-  if (!sid || !token || !from || !to) return; // not configured, skip silently
+  if (!sid || !token || !from || !toRaw) return; // not configured, skip silently
 
-  const body = new URLSearchParams({ From: from, To: to, Body: message });
+  // Support multiple recipients — blast to all in parallel
+  const recipients = toRaw.split(',').map(n => n.trim()).filter(Boolean);
 
-  try {
-    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+  const authHeader = 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64');
+
+  await Promise.allSettled(recipients.map(to => {
+    const body = new URLSearchParams({ From: from, To: to, Body: message });
+    return fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST',
       headers: {
-        'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+        'Authorization': authHeader,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: body.toString(),
-    });
-  } catch (e) {
-    console.error('SMS failed:', e);
-  }
+    }).catch(e => console.error(`SMS to ${to} failed:`, e));
+  }));
 }
 
 // ============================================================
