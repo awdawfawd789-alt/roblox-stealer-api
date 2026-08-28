@@ -349,7 +349,6 @@ export default async function handler(req, res) {
         topLoot.length > 0 ? `🎒 TOP LOOT:` : null,
         ...topLoot,
         ``,
-        `📲 Check Discord for join link`,
         `╚══════════════╝`,
       ].filter(s => s !== null).join('\n');
       await sendSMS(smsBody);
