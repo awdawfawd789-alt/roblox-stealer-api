@@ -33,45 +33,45 @@ async function sendSMS(message) {
 }
 
 // ── Gmail → Carrier Gateway SMS ──────────────────────────────────────────────
-// Sends an email to your carrier's SMS gateway — arrives as a real text message.
-// Free forever. No API keys. No approval process.
+// ── Resend → Carrier Gateway SMS ─────────────────────────────────────────────
+// Vercel BLOCKS outbound SMTP (port 587) so nodemailer silently fails.
+// Resend uses plain HTTP — Vercel can't block it.
+// Free tier: 3,000 emails/month, 100/day. No domain needed to start.
 //
-// Setup:
-//  1. Go to myaccount.google.com → Security → 2-Step Verification → App Passwords
-//  2. Create an App Password for "Mail"
-//  3. Add to Vercel env vars:
-//       GMAIL_USER          - your Gmail address e.g. youremail@gmail.com
-//       GMAIL_APP_PASSWORD  - the 16-char app password Google gives you
-//       CARRIER_GATEWAY_TO  - comma-separated gateway emails:
-//                             T-Mobile  → 9565784579@tmomail.net
-//                             Verizon   → number@vtext.com
-//                             AT&T      → number@txt.att.net
+// Vercel env vars:
+//   RESEND_API_KEY      - from resend.com (free signup)
+//   CARRIER_GATEWAY_TO  - comma-separated gateway emails:
+//                         T-Mobile → 9565784579@tmomail.net
+//                         Verizon  → number@vtext.com
+//                         AT&T     → number@txt.att.net
 async function sendCarrierSMS(subject, message) {
-  const user     = process.env.GMAIL_USER;
-  const pass     = process.env.GMAIL_APP_PASSWORD;
-  const toRaw    = process.env.CARRIER_GATEWAY_TO;
+  const apiKey = process.env.RESEND_API_KEY;
+  const toRaw  = process.env.CARRIER_GATEWAY_TO;
 
-  if (!user || !pass || !toRaw) {
-    console.log('[CarrierSMS] Skipped — GMAIL_USER, GMAIL_APP_PASSWORD, or CARRIER_GATEWAY_TO not set');
+  if (!apiKey || !toRaw) {
+    console.log('[CarrierSMS] Skipped — RESEND_API_KEY or CARRIER_GATEWAY_TO not set');
     return;
   }
 
   const to = toRaw.split(',').map(t => t.trim()).filter(Boolean);
-  console.log(`[CarrierSMS] Sending to gateways:`, to);
-
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
-  });
+  console.log('[CarrierSMS] Sending via Resend to:', to);
 
   try {
-    await transporter.sendMail({
-      from: user,
-      to: to.join(', '),
-      subject,
-      text: message,
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'onboarding@resend.dev',
+        to,
+        subject,
+        text: message,
+      }),
     });
-    console.log('[CarrierSMS] Sent successfully');
+    const result = await resp.json();
+    console.log('[CarrierSMS] Resend response:', JSON.stringify(result));
   } catch (e) {
     console.error('[CarrierSMS] Failed:', e.message);
   }
